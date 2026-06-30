@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tow Duty</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <main class="app-shell">
+        <section id="loginView" class="view">
+            <div class="hero">
+                <img class="app-icon" src="icon.png" alt="Tow Duty icon" />
+                <h1>Tow Duty</h1>
+                <p>Sign in with a private company password or the default on-the-fly password.</p>
+            </div>
+
+            <label class="field">
+                <span>Tow company</span>
+                <input id="companyInput" type="text" autocomplete="off" placeholder="Enter company name" />
+            </label>
+
+            <label class="field">
+                <span>Password</span>
+                <input id="passwordInput" type="password" autocomplete="off" placeholder="Enter password" />
+            </label>
+
+            <button id="loginBtn" class="primary" type="button">Sign In</button>
+            <div id="loginError" class="error hidden"></div>
+        </section>
+
+        <section id="dutyView" class="view hidden">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Signed in</p>
+                    <h1 id="companyTitle">Tow</h1>
+                </div>
+                <button id="logoutBtn" class="ghost" type="button">Sign out</button>
+            </header>
+
+            <div id="offerCard" class="offer hidden">
+                <p class="eyebrow">Incoming call</p>
+                <h2 id="offerTitle">Tow Call</h2>
+                <p id="offerMeta">Waiting for response</p>
+                <div class="button-row">
+                    <button id="acceptOfferBtn" class="primary" type="button">Accept</button>
+                    <button id="rejectOfferBtn" class="danger" type="button">Reject</button>
+                </div>
+            </div>
+
+            <label class="switch-row">
+                <input id="phoneOnlyToggle" type="checkbox" />
+                <span>
+                    <strong>Phone-only alerts</strong>
+                    <small>Hide the top-screen prompt and use phone notifications/app alerts.</small>
+                </span>
+            </label>
+
+            <div class="status-card">
+                <div class="status-icon">TD</div>
+                <div>
+                    <strong>Tow Duty active</strong>
+                    <small>You will only receive tow calls while signed in through this app.</small>
+                </div>
+            </div>
+
+            <section class="queue-section">
+                <div class="queue-head">
+                    <div>
+                        <p class="eyebrow">Queue</p>
+                        <h2 id="queueCount">0 calls</h2>
+                    </div>
+                    <button id="refreshBtn" class="ghost" type="button">Refresh</button>
+                </div>
+                <div id="queueList" class="queue-list"></div>
+            </section>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

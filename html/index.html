@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tow Queue</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div id="tablet" class="tablet hidden">
+        <div id="dragBar" class="tablet-bar">
+            <div>
+                <div class="title">Tow Queue</div>
+                <div id="subtitle" class="subtitle">Drag this bar to move</div>
+            </div>
+            <div class="bar-actions">
+                <button id="refreshBtn" class="icon-btn" title="Refresh">↻</button>
+                <button id="closeBtn" class="icon-btn" title="Close">×</button>
+            </div>
+        </div>
+
+        <div id="busyBanner" class="busy hidden">You already have an active tow call.</div>
+        <div id="queue" class="queue"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
