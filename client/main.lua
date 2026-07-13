@@ -63,6 +63,28 @@ local function showNotify(text, nType)
     })
 end
 
+local function refreshTowAvailability()
+    if not lib then return end
+
+    local result = lib.callback.await('twopoint_tow:getAvailability', false)
+    if type(result) == 'table' then
+        towAvailable = result.available == true
+    else
+        towAvailable = result == true
+    end
+end
+
+CreateThread(function()
+    local refreshMs = ((Config.Target or {}).availabilityRefreshMs or 30000)
+    if refreshMs < 5000 then refreshMs = 5000 end
+
+    Wait(2500)
+    while true do
+        refreshTowAvailability()
+        Wait(refreshMs)
+    end
+end)
+
 local lbPhoneAppRegistered = false
 
 local function getLBPhoneResource()
@@ -104,6 +126,21 @@ local function sendTowPhoneState()
     })
 end
 
+local function sendSupervisorPhoneState()
+    if not lbPhoneAvailable() or not lib then return end
+
+    local state = lib.callback.await('twopoint_tow:supervisorGetState', false)
+    sendPhoneAppMessage({
+        action = "supervisorState",
+        state = state or {}
+    })
+end
+
+local function sendAllTowPhoneState()
+    sendTowPhoneState()
+    sendSupervisorPhoneState()
+end
+
 local function registerLBPhoneApp()
     if lbPhoneAppRegistered or not lbPhoneAvailable() then return end
 
@@ -126,7 +163,7 @@ local function registerLBPhoneApp()
         onOpen = function()
             CreateThread(function()
                 Wait(250)
-                sendTowPhoneState()
+                sendAllTowPhoneState()
             end)
         end
     })
@@ -166,6 +203,10 @@ end)
 
 RegisterNetEvent('twopoint_tow:phoneAppUpdate', function()
     sendTowPhoneState()
+end)
+
+RegisterNetEvent('twopoint_tow:phoneSupervisorUpdate', function()
+    sendSupervisorPhoneState()
 end)
 
 local function fetchTowQueue()
@@ -366,15 +407,19 @@ CreateThread(function()
         return
     end
 
+    refreshTowAvailability()
+
+    local targetCfg = Config.Target or {}
+    local targetDistance = targetCfg.distance or 2.5
+
     exports.ox_target:addGlobalVehicle({
         {
             name = 'twopoint_calltow',
-            icon = 'fa-solid fa-truck-pickup',
-            label = 'Call Tow',
-            distance = 2.5,
+            icon = targetCfg.callTowIcon or 'fa-solid fa-truck-pickup',
+            label = targetCfg.callTowLabel or 'Call Tow',
+            distance = targetDistance,
             canInteract = function(entity, distance, coords, name)
-                -- Everyone can see this; server will tell them if no tow is working
-                return true
+                return towAvailable == true
             end,
             onSelect = function(data)
                 local veh = data.entity
@@ -394,6 +439,18 @@ CreateThread(function()
                     secondaryColour = secondaryColour,
                     sourceType = 'target'
                 })
+            end
+        },
+        {
+            name = 'twopoint_no_tow_available',
+            icon = targetCfg.noTowAvailableIcon or 'fa-solid fa-circle-xmark',
+            label = targetCfg.noTowAvailableLabel or 'No Tow Available',
+            distance = targetDistance,
+            canInteract = function(entity, distance, coords, name)
+                return towAvailable ~= true
+            end,
+            onSelect = function(data)
+                showNotify(Config.Messages.noTowUnitsWorking or "No tow trucks working currently.", "error")
             end
         }
     })
@@ -485,6 +542,43 @@ RegisterNUICallback('phoneSetPhoneOnlyMode', function(data, cb)
     local result = lib.callback.await('twopoint_tow:phoneSetPhoneOnlyMode', false, data or {})
     cb(result or { ok = false })
     sendTowPhoneState()
+end)
+
+RegisterNUICallback('supervisorGetState', function(_, cb)
+    local state = lib.callback.await('twopoint_tow:supervisorGetState', false)
+    cb(state or {})
+end)
+
+RegisterNUICallback('supervisorLogin', function(data, cb)
+    local result = lib.callback.await('twopoint_tow:supervisorLogin', false, data or {})
+    if not result or not result.ok then
+        local err = result and result.error or "Unable to sign in as supervisor."
+        showNotify(err, "error")
+        cb({ ok = false, error = err })
+        return
+    end
+
+    cb(result)
+    sendAllTowPhoneState()
+end)
+
+RegisterNUICallback('supervisorLogout', function(_, cb)
+    local result = lib.callback.await('twopoint_tow:supervisorLogout', false)
+    cb(result or { ok = true })
+    sendSupervisorPhoneState()
+end)
+
+RegisterNUICallback('supervisorUpdateCompany', function(data, cb)
+    local result = lib.callback.await('twopoint_tow:supervisorUpdateCompany', false, data or {})
+    if not result or not result.ok then
+        local err = result and result.error or "Unable to update company settings."
+        showNotify(err, "error")
+        cb({ ok = false, error = err })
+        return
+    end
+
+    cb(result)
+    sendAllTowPhoneState()
 end)
 
 RegisterNUICallback('phoneAcceptCall', function(data, cb)

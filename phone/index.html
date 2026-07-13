@@ -12,30 +12,65 @@
             <div class="hero">
                 <img class="app-icon" src="icon.png" alt="Tow Duty icon" />
                 <h1>Tow Duty</h1>
-                <p>Sign in with a private company password or the default on-the-fly password.</p>
+                <p id="loginSubtitle">Sign in with a private company password or the default on-the-fly password.</p>
             </div>
 
-            <label class="field">
-                <span>Tow company</span>
-                <input id="companyInput" type="text" autocomplete="off" placeholder="Enter company name" />
-            </label>
+            <div id="loginModeTabs" class="mode-tabs" aria-label="Sign-in type">
+                <button id="driverModeBtn" class="mode-tab active" type="button">Driver</button>
+                <button id="supervisorModeBtn" class="mode-tab" type="button">Supervisor</button>
+            </div>
 
-            <label class="field">
-                <span>Password</span>
-                <input id="passwordInput" type="password" autocomplete="off" placeholder="Enter password" />
-            </label>
+            <div id="driverLoginForm" class="login-form">
+                <label class="field">
+                    <span>Tow company</span>
+                    <input id="companyInput" type="text" autocomplete="off" placeholder="Enter company name" />
+                </label>
 
-            <button id="loginBtn" class="primary" type="button">Sign In</button>
-            <div id="loginError" class="error hidden"></div>
+                <label class="field">
+                    <span>Password</span>
+                    <input id="passwordInput" type="password" autocomplete="off" placeholder="Enter password" />
+                </label>
+
+                <button id="loginBtn" class="primary" type="button">Sign In</button>
+                <div id="loginError" class="error hidden"></div>
+            </div>
+
+            <div id="supervisorLoginForm" class="login-form hidden">
+                <div class="info-card compact">
+                    <div class="status-icon">S</div>
+                    <div>
+                        <strong>Company supervisor</strong>
+                        <small>Your FiveM identifier must be listed for this company in the config.</small>
+                    </div>
+                </div>
+
+                <label class="field">
+                    <span>Company</span>
+                    <input id="supervisorCompanyInput" type="text" autocomplete="off" placeholder="Enter managed company" />
+                </label>
+
+                <label class="field">
+                    <span>Supervisor password <small>(if required)</small></span>
+                    <input id="supervisorPasswordInput" type="password" autocomplete="off" placeholder="Optional company password" />
+                </label>
+
+                <button id="supervisorLoginBtn" class="primary" type="button">Open Supervisor Panel</button>
+                <div id="supervisorLoginError" class="error hidden"></div>
+            </div>
+
+            <button id="loginBackBtn" class="ghost wide hidden" type="button">Back</button>
         </section>
 
         <section id="dutyView" class="view hidden">
             <header class="topbar">
-                <div>
+                <div class="title-block">
                     <p class="eyebrow">Signed in</p>
                     <h1 id="companyTitle">Tow</h1>
                 </div>
-                <button id="logoutBtn" class="ghost" type="button">Sign out</button>
+                <div class="topbar-actions">
+                    <button id="manageBtn" class="ghost hidden" type="button">Manage</button>
+                    <button id="logoutBtn" class="ghost" type="button">Sign out</button>
+                </div>
             </header>
 
             <div id="offerCard" class="offer hidden">
@@ -74,6 +109,65 @@
                 </div>
                 <div id="queueList" class="queue-list"></div>
             </section>
+        </section>
+
+        <section id="supervisorView" class="view hidden">
+            <header class="topbar supervisor-topbar">
+                <div class="title-block">
+                    <p class="eyebrow">Supervisor panel</p>
+                    <h1 id="supervisorCompanyTitle">Company</h1>
+                </div>
+                <div class="topbar-actions">
+                    <button id="supervisorDutyBtn" class="ghost" type="button">Tow duty</button>
+                    <button id="supervisorLogoutBtn" class="ghost" type="button">Exit</button>
+                </div>
+            </header>
+
+            <div class="info-card management-card">
+                <div class="status-icon">S</div>
+                <div>
+                    <strong>Company settings</strong>
+                    <small>You can only view and edit the company assigned to your supervisor account.</small>
+                </div>
+            </div>
+
+            <section class="settings-card">
+                <div class="settings-heading">
+                    <p class="eyebrow">Public identity</p>
+                    <h2>Company details</h2>
+                </div>
+
+                <label class="field">
+                    <span>Company display name</span>
+                    <input id="managedCompanyNameInput" type="text" autocomplete="off" placeholder="Company name" />
+                </label>
+
+                <div class="divider"></div>
+
+                <div class="settings-heading">
+                    <p class="eyebrow">Driver access</p>
+                    <h2>Change duty password</h2>
+                    <small>Leave both password fields blank to keep the current password.</small>
+                </div>
+
+                <label class="field">
+                    <span>New driver password</span>
+                    <input id="managedPasswordInput" type="password" autocomplete="off" placeholder="New password" />
+                </label>
+
+                <label class="field">
+                    <span>Confirm driver password</span>
+                    <input id="managedPasswordConfirmInput" type="password" autocomplete="off" placeholder="Confirm password" />
+                </label>
+
+                <button id="saveCompanyBtn" class="primary" type="button">Save Company Settings</button>
+                <div id="supervisorFeedback" class="feedback hidden"></div>
+            </section>
+
+            <div class="security-note">
+                <strong>Restricted access</strong>
+                <small>This panel never displays another company's settings or its current driver password.</small>
+            </div>
         </section>
     </main>
 

@@ -1,10 +1,27 @@
 const loginView = document.getElementById('loginView');
 const dutyView = document.getElementById('dutyView');
+const supervisorView = document.getElementById('supervisorView');
+
+const loginSubtitle = document.getElementById('loginSubtitle');
+const loginModeTabs = document.getElementById('loginModeTabs');
+const driverModeBtn = document.getElementById('driverModeBtn');
+const supervisorModeBtn = document.getElementById('supervisorModeBtn');
+const driverLoginForm = document.getElementById('driverLoginForm');
+const supervisorLoginForm = document.getElementById('supervisorLoginForm');
+const loginBackBtn = document.getElementById('loginBackBtn');
+
 const companyInput = document.getElementById('companyInput');
 const passwordInput = document.getElementById('passwordInput');
 const loginBtn = document.getElementById('loginBtn');
 const loginError = document.getElementById('loginError');
+
+const supervisorCompanyInput = document.getElementById('supervisorCompanyInput');
+const supervisorPasswordInput = document.getElementById('supervisorPasswordInput');
+const supervisorLoginBtn = document.getElementById('supervisorLoginBtn');
+const supervisorLoginError = document.getElementById('supervisorLoginError');
+
 const logoutBtn = document.getElementById('logoutBtn');
+const manageBtn = document.getElementById('manageBtn');
 const companyTitle = document.getElementById('companyTitle');
 const phoneOnlyToggle = document.getElementById('phoneOnlyToggle');
 const queueCount = document.getElementById('queueCount');
@@ -16,9 +33,22 @@ const offerMeta = document.getElementById('offerMeta');
 const acceptOfferBtn = document.getElementById('acceptOfferBtn');
 const rejectOfferBtn = document.getElementById('rejectOfferBtn');
 
-let state = { onDuty: false, calls: [] };
+const supervisorCompanyTitle = document.getElementById('supervisorCompanyTitle');
+const supervisorDutyBtn = document.getElementById('supervisorDutyBtn');
+const supervisorLogoutBtn = document.getElementById('supervisorLogoutBtn');
+const managedCompanyNameInput = document.getElementById('managedCompanyNameInput');
+const managedPasswordInput = document.getElementById('managedPasswordInput');
+const managedPasswordConfirmInput = document.getElementById('managedPasswordConfirmInput');
+const saveCompanyBtn = document.getElementById('saveCompanyBtn');
+const supervisorFeedback = document.getElementById('supervisorFeedback');
+
+let state = { onDuty: false, calls: [], companyManagementEnabled: true };
+let supervisorState = { authenticated: false, enabled: true };
 let activeOfferId = null;
 let busy = false;
+let currentView = 'login';
+let loginMode = 'driver';
+let initialized = false;
 
 function parentResource() {
     if (globalThis.resourceName) return globalThis.resourceName;
@@ -64,33 +94,106 @@ function formatAge(seconds) {
     return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
-function setError(message) {
-    loginError.textContent = message || '';
-    loginError.classList.toggle('hidden', !message);
+function showView(view) {
+    currentView = view;
+    loginView.classList.toggle('hidden', view !== 'login');
+    dutyView.classList.toggle('hidden', view !== 'duty');
+    supervisorView.classList.toggle('hidden', view !== 'supervisor');
 }
 
-function updateState(nextState = {}) {
+function managementEnabled() {
+    return state.companyManagementEnabled !== false && supervisorState.enabled !== false;
+}
+
+function setMessage(element, message, type = 'error') {
+    element.textContent = message || '';
+    element.classList.toggle('hidden', !message);
+    element.classList.toggle('success', type === 'success');
+}
+
+function clearLoginMessages() {
+    setMessage(loginError, '');
+    setMessage(supervisorLoginError, '');
+}
+
+function setLoginMode(mode) {
+    if (mode === 'supervisor' && !managementEnabled()) mode = 'driver';
+    loginMode = mode;
+
+    const supervisorMode = mode === 'supervisor';
+    driverModeBtn.classList.toggle('active', !supervisorMode);
+    supervisorModeBtn.classList.toggle('active', supervisorMode);
+    driverLoginForm.classList.toggle('hidden', supervisorMode);
+    supervisorLoginForm.classList.toggle('hidden', !supervisorMode);
+    loginSubtitle.textContent = supervisorMode
+        ? 'Use your company authorization. A password is only needed when required by the company.'
+        : 'Sign in with a private company password or the default on-the-fly password.';
+
+    loginBackBtn.classList.toggle('hidden', !state.onDuty && !supervisorState.authenticated);
+    clearLoginMessages();
+}
+
+function updateDriverState(nextState = {}) {
     state = nextState || {};
     busy = !!state.busy;
-
-    loginView.classList.toggle('hidden', !!state.onDuty);
-    dutyView.classList.toggle('hidden', !state.onDuty);
-
-    if (!state.onDuty) {
-        activeOfferId = null;
-        offerCard.classList.add('hidden');
-        renderQueue([]);
-        return;
-    }
 
     companyTitle.textContent = state.companyName || 'Tow';
     phoneOnlyToggle.checked = !!state.phoneOnlyMode;
     phoneOnlyToggle.disabled = !!state.forcePhoneOnlyMode;
 
-    const calls = state.calls || [];
-    const activeOffer = state.activeOffer || calls.find(call => call.offeredToMe);
-    renderOffer(activeOffer);
-    renderQueue(calls);
+    const showManagement = managementEnabled();
+    loginModeTabs.classList.toggle('hidden', !showManagement);
+    supervisorModeBtn.classList.toggle('hidden', !showManagement);
+    manageBtn.classList.toggle('hidden', !showManagement);
+
+    if (!state.onDuty) {
+        activeOfferId = null;
+        offerCard.classList.add('hidden');
+        renderQueue([]);
+    } else {
+        const calls = state.calls || [];
+        const activeOffer = state.activeOffer || calls.find(call => call.offeredToMe);
+        renderOffer(activeOffer);
+        renderQueue(calls);
+    }
+
+    supervisorDutyBtn.textContent = state.onDuty ? 'Tow duty' : 'Driver sign in';
+    loginBackBtn.classList.toggle('hidden', !state.onDuty && !supervisorState.authenticated);
+
+    if (initialized && currentView === 'duty' && !state.onDuty) {
+        showView(supervisorState.authenticated ? 'supervisor' : 'login');
+    }
+}
+
+function updateSupervisorState(nextState = {}) {
+    supervisorState = nextState || { authenticated: false, enabled: true };
+
+    const showManagement = managementEnabled();
+    loginModeTabs.classList.toggle('hidden', !showManagement);
+    supervisorModeBtn.classList.toggle('hidden', !showManagement);
+    manageBtn.classList.toggle('hidden', !showManagement);
+
+    if (supervisorState.authenticated) {
+        supervisorCompanyTitle.textContent = supervisorState.companyName || 'Company';
+        managedCompanyNameInput.disabled = supervisorState.canRename === false;
+        managedPasswordInput.disabled = supervisorState.canChangePassword === false;
+        managedPasswordConfirmInput.disabled = supervisorState.canChangePassword === false;
+
+        if (document.activeElement !== managedCompanyNameInput) {
+            managedCompanyNameInput.value = supervisorState.companyName || '';
+        }
+    }
+
+    supervisorDutyBtn.textContent = state.onDuty ? 'Tow duty' : 'Driver sign in';
+    loginBackBtn.classList.toggle('hidden', !state.onDuty && !supervisorState.authenticated);
+
+    if (initialized && currentView === 'supervisor' && !supervisorState.authenticated) {
+        if (state.onDuty) showView('duty');
+        else {
+            setLoginMode('supervisor');
+            showView('login');
+        }
+    }
 }
 
 function renderOffer(call) {
@@ -142,24 +245,35 @@ function renderQueue(calls) {
         });
 
         const rejectBtn = div.querySelector('.reject-call');
-        if (rejectBtn) {
-            rejectBtn.addEventListener('click', () => respondToOffer(call.id, false));
-        }
-
+        if (rejectBtn) rejectBtn.addEventListener('click', () => respondToOffer(call.id, false));
         queueList.appendChild(div);
     }
 }
 
-async function refreshState() {
+async function refreshAllState() {
     try {
-        updateState(await nui('phoneGetState'));
+        const [driverResult, supervisorResult] = await Promise.all([
+            nui('phoneGetState'),
+            nui('supervisorGetState')
+        ]);
+
+        updateDriverState(driverResult || {});
+        updateSupervisorState(supervisorResult || {});
+
+        if (!initialized) {
+            initialized = true;
+            if (state.onDuty) showView('duty');
+            else if (supervisorState.authenticated) showView('supervisor');
+            else showView('login');
+            setLoginMode('driver');
+        }
     } catch (error) {
         console.error(error);
     }
 }
 
 async function login() {
-    setError('');
+    setMessage(loginError, '');
     const companyName = companyInput.value.trim() || 'Tow';
     const password = passwordInput.value;
 
@@ -167,28 +281,110 @@ async function login() {
     try {
         const result = await nui('phoneLogin', { companyName, password });
         if (!result || !result.ok) {
-            setError(result && result.error ? result.error : 'Unable to sign in.');
+            setMessage(loginError, result && result.error ? result.error : 'Unable to sign in.');
             return;
         }
 
         passwordInput.value = '';
-        updateState(result.state || await nui('phoneGetState'));
+        updateDriverState(result.state || await nui('phoneGetState'));
+        showView('duty');
     } catch (error) {
-        setError('Unable to sign in.');
+        setMessage(loginError, 'Unable to sign in.');
         console.error(error);
     } finally {
         loginBtn.disabled = false;
     }
 }
 
+async function supervisorLogin() {
+    setMessage(supervisorLoginError, '');
+    const companyName = supervisorCompanyInput.value.trim();
+    const password = supervisorPasswordInput.value;
+
+    if (!companyName) {
+        setMessage(supervisorLoginError, 'Enter the company you supervise.');
+        return;
+    }
+
+    supervisorLoginBtn.disabled = true;
+    try {
+        const result = await nui('supervisorLogin', { companyName, password });
+        if (!result || !result.ok) {
+            setMessage(supervisorLoginError, result && result.error ? result.error : 'Unable to open supervisor panel.');
+            return;
+        }
+
+        supervisorPasswordInput.value = '';
+        updateSupervisorState(result.state || await nui('supervisorGetState'));
+        setMessage(supervisorFeedback, '');
+        showView('supervisor');
+    } catch (error) {
+        setMessage(supervisorLoginError, 'Unable to open supervisor panel.');
+        console.error(error);
+    } finally {
+        supervisorLoginBtn.disabled = false;
+    }
+}
+
 async function logout() {
     await nui('phoneLogout');
-    updateState({ onDuty: false, calls: [] });
+    updateDriverState({
+        onDuty: false,
+        calls: [],
+        companyManagementEnabled: state.companyManagementEnabled
+    });
+    if (supervisorState.authenticated) showView('supervisor');
+    else showView('login');
+}
+
+async function supervisorLogout() {
+    await nui('supervisorLogout');
+    updateSupervisorState({ authenticated: false, enabled: supervisorState.enabled !== false });
+    setMessage(supervisorFeedback, '');
+    if (state.onDuty) showView('duty');
+    else {
+        setLoginMode('supervisor');
+        showView('login');
+    }
+}
+
+async function saveCompanySettings() {
+    setMessage(supervisorFeedback, '');
+
+    const companyName = managedCompanyNameInput.value.trim();
+    const password = managedPasswordInput.value;
+    const confirmation = managedPasswordConfirmInput.value;
+
+    if (password !== confirmation) {
+        setMessage(supervisorFeedback, 'The new driver passwords do not match.');
+        return;
+    }
+
+    saveCompanyBtn.disabled = true;
+    try {
+        const result = await nui('supervisorUpdateCompany', { companyName, password });
+        if (!result || !result.ok) {
+            setMessage(supervisorFeedback, result && result.error ? result.error : 'Unable to save company settings.');
+            return;
+        }
+
+        managedPasswordInput.value = '';
+        managedPasswordConfirmInput.value = '';
+        updateSupervisorState(result.state || await nui('supervisorGetState'));
+        const updatedDriverState = await nui('phoneGetState');
+        updateDriverState(updatedDriverState || {});
+        setMessage(supervisorFeedback, result.message || 'Company settings updated.', 'success');
+    } catch (error) {
+        setMessage(supervisorFeedback, 'Unable to save company settings.');
+        console.error(error);
+    } finally {
+        saveCompanyBtn.disabled = false;
+    }
 }
 
 async function setPhoneOnlyMode(enabled) {
     const result = await nui('phoneSetPhoneOnlyMode', { enabled });
-    if (result && result.state) updateState(result.state);
+    if (result && result.state) updateDriverState(result.state);
 }
 
 async function acceptCall(callId, offeredToMe = false) {
@@ -196,15 +392,22 @@ async function acceptCall(callId, offeredToMe = false) {
         ? await nui('phoneRespondToOffer', { callId, accept: true })
         : await nui('phoneAcceptCall', { callId });
 
-    if (result && result.state) updateState(result.state);
-    else refreshState();
+    if (result && result.state) updateDriverState(result.state);
+    else refreshAllState();
 }
 
 async function respondToOffer(callId, accept) {
     const result = await nui('phoneRespondToOffer', { callId, accept });
-    if (result && result.state) updateState(result.state);
-    else refreshState();
+    if (result && result.state) updateDriverState(result.state);
+    else refreshAllState();
 }
+
+driverModeBtn.addEventListener('click', () => setLoginMode('driver'));
+supervisorModeBtn.addEventListener('click', () => setLoginMode('supervisor'));
+loginBackBtn.addEventListener('click', () => {
+    if (state.onDuty) showView('duty');
+    else if (supervisorState.authenticated) showView('supervisor');
+});
 
 loginBtn.addEventListener('click', login);
 passwordInput.addEventListener('keydown', event => {
@@ -213,8 +416,25 @@ passwordInput.addEventListener('keydown', event => {
 companyInput.addEventListener('keydown', event => {
     if (event.key === 'Enter') passwordInput.focus();
 });
+
+supervisorLoginBtn.addEventListener('click', supervisorLogin);
+supervisorPasswordInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') supervisorLogin();
+});
+supervisorCompanyInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') supervisorPasswordInput.focus();
+});
+
 logoutBtn.addEventListener('click', logout);
-refreshBtn.addEventListener('click', refreshState);
+manageBtn.addEventListener('click', () => {
+    if (supervisorState.authenticated) showView('supervisor');
+    else {
+        supervisorCompanyInput.value = state.companyName || '';
+        setLoginMode('supervisor');
+        showView('login');
+    }
+});
+refreshBtn.addEventListener('click', refreshAllState);
 phoneOnlyToggle.addEventListener('change', () => setPhoneOnlyMode(phoneOnlyToggle.checked));
 acceptOfferBtn.addEventListener('click', () => {
     if (activeOfferId) respondToOffer(activeOfferId, true);
@@ -223,12 +443,24 @@ rejectOfferBtn.addEventListener('click', () => {
     if (activeOfferId) respondToOffer(activeOfferId, false);
 });
 
-window.addEventListener('message', event => {
-    const data = event.data || {};
-    if (data.action === 'state') {
-        updateState(data.state || {});
+supervisorDutyBtn.addEventListener('click', () => {
+    if (state.onDuty) showView('duty');
+    else {
+        setLoginMode('driver');
+        showView('login');
     }
 });
+supervisorLogoutBtn.addEventListener('click', supervisorLogout);
+saveCompanyBtn.addEventListener('click', saveCompanySettings);
+managedPasswordConfirmInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') saveCompanySettings();
+});
 
-refreshState();
-setInterval(refreshState, 5000);
+window.addEventListener('message', event => {
+    const data = event.data || {};
+    if (data.action === 'state') updateDriverState(data.state || {});
+    if (data.action === 'supervisorState') updateSupervisorState(data.state || {});
+});
+
+refreshAllState();
+setInterval(refreshAllState, 5000);

@@ -2,32 +2,8 @@ Config = {}
 
 Config.Debug = false
 
--- Tow duty company/password setup.
---
--- Private/configured companies require BOTH the exact company name and that company's password.
--- Example phone app or command login: SADOT / sadot123
---
--- Random/on-the-fly companies are still supported with the default passwords below.
--- Example: /towduty Some Random Tow tow123
-Config.TowDutyAuth = {
-    -- Private tow companies. Add/remove as many as you want.
-    -- Company names are checked case-insensitively, but the configured casing is used for display.
-    Companies = {
-        ["SADOT"] = "sadot123",
-        ["Los Santos Towing"] = "lstow123",
-        ["Hayes Auto"] = "hayes123"
-    },
-
-    -- Keep the original behavior: any company name can clock in with one of these passwords.
-    AllowRandomCompanyNames = true,
-    DefaultPasswords = {
-        "tow123"
-    }
-}
-
--- Legacy/default password list kept for backwards compatibility with older configs.
--- If Config.TowDutyAuth.DefaultPasswords is missing, the script falls back to this list.
-Config.TowDutyPasswords = Config.TowDutyAuth.DefaultPasswords
+-- Tow company passwords, supervisor passwords, and supervisor identifiers are
+-- stored in server_config.lua so they are never downloaded to players.
 
 Config.Notify = {
     title = "Tow Service",
@@ -40,6 +16,21 @@ Config.AcceptTime = 15000
 
 -- Distance (m) at which the driver is considered "arrived"
 Config.ArrivalRadius = 20.0
+
+-- ox_target / third-eye tow request labels.
+-- The visible option changes based on whether any tow driver is on duty.
+Config.Target = {
+    distance = 2.5,
+
+    callTowLabel = "Call Tow",
+    callTowIcon = "fa-solid fa-truck-pickup",
+
+    noTowAvailableLabel = "No Tow Available",
+    noTowAvailableIcon = "fa-solid fa-circle-xmark",
+
+    -- Fallback refresh in case a client misses the server availability event.
+    availabilityRefreshMs = 30000
+}
 
 -- Route/waypoint created for the tow driver after accepting a call.
 Config.TowRoute = {
@@ -68,6 +59,9 @@ Config.Messages = {
     dutyOnCompany           = "You are now on Tow Duty with %s.",
     dutyOff                 = "You are now off Tow Duty.",
     wrongPassword           = "Invalid tow duty company name or password.",
+    supervisorDenied        = "You are not authorized to manage that tow company.",
+    supervisorWrongPassword = "Invalid supervisor password.",
+    companyUpdated          = "Tow company settings updated.",
     unknownCompany          = "Unknown tow company.",
     notOnDuty               = "You are not on tow duty.",
     noTowUnitsWorking       = "No tow trucks working currently.",

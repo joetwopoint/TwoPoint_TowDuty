@@ -50,7 +50,7 @@ button {
 
 .app-shell {
     min-height: 100vh;
-    padding: 58px 14px 24px;
+    padding: 66px 14px 24px;
     background:
         radial-gradient(circle at 50% -8%, rgba(246, 163, 19, 0.24), transparent 28%),
         radial-gradient(circle at 15% 12%, rgba(255, 194, 75, 0.14), transparent 30%),
@@ -64,7 +64,7 @@ button {
 }
 
 #loginView {
-    padding-top: 18px;
+    padding-top: 20px;
 }
 
 #dutyView {
@@ -440,5 +440,184 @@ small,
 
     .hero p {
         font-size: 12px;
+    }
+}
+
+/* Driver / supervisor navigation */
+.mode-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--td-border);
+    border-radius: 15px;
+    background: rgba(15, 15, 15, 0.82);
+}
+
+.mode-tab {
+    min-height: 38px;
+    border: 0;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--td-muted);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.mode-tab.active {
+    background: linear-gradient(180deg, rgba(255, 194, 75, 0.2), rgba(246, 163, 19, 0.12));
+    color: var(--td-gold-light);
+    box-shadow: inset 0 0 0 1px rgba(255, 194, 75, 0.28);
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.topbar-actions .ghost {
+    min-height: 36px;
+    padding: 8px 10px;
+    font-size: 12px;
+}
+
+.title-block {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.wide {
+    width: 100%;
+}
+
+.info-card,
+.settings-card,
+.security-note {
+    border: 1px solid var(--td-border);
+    border-radius: 17px;
+    background: var(--td-panel);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.info-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 12px;
+}
+
+.info-card.compact {
+    background:
+        radial-gradient(circle at 0% 0%, rgba(246, 163, 19, 0.14), transparent 48%),
+        var(--td-panel);
+    border-color: rgba(246, 163, 19, 0.24);
+}
+
+.info-card div,
+.security-note {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-card strong,
+.security-note strong {
+    font-size: 14px;
+    line-height: 1.15;
+}
+
+.info-card small,
+.security-note small,
+.settings-heading small {
+    color: var(--td-muted);
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.management-card {
+    border-color: var(--td-border-gold);
+    background:
+        radial-gradient(circle at 0% 0%, rgba(246, 163, 19, 0.16), transparent 52%),
+        var(--td-panel);
+}
+
+.settings-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px;
+}
+
+.settings-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.divider {
+    height: 1px;
+    background: var(--td-border);
+    margin: 1px 0;
+}
+
+.security-note {
+    padding: 12px;
+    border-color: rgba(246, 163, 19, 0.22);
+    background: rgba(246, 163, 19, 0.08);
+}
+
+.feedback {
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.3;
+    border: 1px solid rgba(239, 68, 68, 0.42);
+    background: rgba(239, 68, 68, 0.14);
+    color: #fecaca;
+}
+
+.feedback.success {
+    border-color: rgba(246, 163, 19, 0.4);
+    background: rgba(246, 163, 19, 0.12);
+    color: #ffe0a3;
+}
+
+.primary:disabled,
+.ghost:disabled,
+.danger:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+#supervisorView {
+    padding-top: 10px;
+}
+
+.supervisor-topbar h1 {
+    max-width: 132px;
+}
+
+@media (max-width: 340px) {
+    .topbar-actions {
+        gap: 4px;
+    }
+
+    .topbar-actions .ghost {
+        padding: 8px;
+        font-size: 11px;
+    }
+
+    .supervisor-topbar h1 {
+        max-width: 110px;
     }
 }

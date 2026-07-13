@@ -9,6 +9,10 @@ local RotationIndex = 1
 local TowStats = {}
 local statsFileName = "tow_stats.json"
 
+local ManagedCompanies = {}
+local ManagedCompaniesLoaded = false
+local SupervisorSessions = {}
+
 local tryAssignQueuedCalls
 
 -------------------------------------------------
@@ -68,6 +72,19 @@ local function broadcastPhoneAppUpdate()
     end
 end
 
+local function sendSupervisorAppUpdate(src)
+    if not Config.LBPhone or not Config.LBPhone.enabled then return end
+    TriggerClientEvent('twopoint_tow:phoneSupervisorUpdate', src)
+end
+
+local function broadcastSupervisorAppUpdate(companyId)
+    for src, session in pairs(SupervisorSessions) do
+        if not companyId or session.companyId == companyId then
+            sendSupervisorAppUpdate(src)
+        end
+    end
+end
+
 local function trimString(value)
     value = value and tostring(value) or ""
     return value:gsub("^%s+", ""):gsub("%s+$", "")
@@ -75,6 +92,91 @@ end
 
 local function normalizeCompanyName(value)
     return trimString(value):lower()
+end
+
+local function companyManagementEnabled()
+    return Config.CompanyManagement and Config.CompanyManagement.enabled == true
+end
+
+local function getCompanyDataFileName()
+    return (Config.CompanyManagement and Config.CompanyManagement.dataFile) or "tow_companies.json"
+end
+
+local function saveManagedCompanies()
+    if not companyManagementEnabled() then return end
+
+    local saveData = {}
+    for id, record in pairs(ManagedCompanies) do
+        saveData[id] = {
+            baseName = record.baseName,
+            name = record.name,
+            password = record.password,
+            updatedAt = record.updatedAt
+        }
+    end
+
+    SaveResourceFile(GetCurrentResourceName(), getCompanyDataFileName(), json.encode(saveData), -1)
+end
+
+local function loadManagedCompanies()
+    ManagedCompanies = {}
+
+    if not companyManagementEnabled() then
+        ManagedCompaniesLoaded = true
+        return
+    end
+
+    local stored = {}
+    local raw = LoadResourceFile(GetCurrentResourceName(), getCompanyDataFileName())
+    if raw and raw ~= "" then
+        local ok, decoded = pcall(json.decode, raw)
+        if ok and type(decoded) == "table" then
+            stored = decoded
+        else
+            print("[TwoPoint_TowDuty] Unable to decode " .. getCompanyDataFileName() .. "; using config values.")
+        end
+    end
+
+    local configured = Config.TowDutyAuth and Config.TowDutyAuth.Companies or {}
+    for baseName, password in pairs(configured) do
+        local id = normalizeCompanyName(baseName)
+        if id ~= "" then
+            local saved = type(stored[id]) == "table" and stored[id] or {}
+            ManagedCompanies[id] = {
+                id = id,
+                baseName = tostring(baseName),
+                name = trimString(saved.name) ~= "" and trimString(saved.name) or tostring(baseName),
+                password = saved.password ~= nil and tostring(saved.password) or tostring(password or ""),
+                updatedAt = tonumber(saved.updatedAt)
+            }
+        end
+    end
+
+    ManagedCompaniesLoaded = true
+end
+
+local function ensureManagedCompaniesLoaded()
+    if not ManagedCompaniesLoaded then
+        loadManagedCompanies()
+    end
+end
+
+local function getManagedCompanyByInput(company)
+    if not companyManagementEnabled() then return nil end
+    ensureManagedCompaniesLoaded()
+
+    local wanted = normalizeCompanyName(company)
+    if wanted == "" then return nil end
+
+    for id, record in pairs(ManagedCompanies) do
+        if wanted == id
+            or wanted == normalizeCompanyName(record.baseName)
+            or wanted == normalizeCompanyName(record.name) then
+            return record
+        end
+    end
+
+    return nil
 end
 
 local function getDefaultDutyPasswords()
@@ -100,6 +202,11 @@ end
 local function getConfiguredCompanyAuth(company)
     local wanted = normalizeCompanyName(company)
     if wanted == "" then return nil end
+
+    local managed = getManagedCompanyByInput(company)
+    if managed then
+        return managed.name, managed.password
+    end
 
     local configured = Config.TowDutyAuth and Config.TowDutyAuth.Companies or nil
     if type(configured) ~= "table" then return nil end
@@ -346,6 +453,335 @@ local function sendDutyWebhook(src, action, companyName, sessionSeconds)
     end
 
     sendWebhook(url, embed)
+end
+
+local function getSupervisorCompanyConfig(record)
+    if not record or not companyManagementEnabled() then return nil end
+
+    local companies = Config.CompanyManagement and Config.CompanyManagement.Companies or nil
+    if type(companies) ~= "table" then return nil end
+
+    for configuredName, supervisorConfig in pairs(companies) do
+        local configuredId = normalizeCompanyName(configuredName)
+        if configuredId == record.id
+            or configuredId == normalizeCompanyName(record.baseName)
+            or configuredId == normalizeCompanyName(record.name) then
+            return type(supervisorConfig) == "table" and supervisorConfig or nil
+        end
+    end
+
+    return nil
+end
+
+local function collectPlayerIdentifiers(src)
+    local identifiers = {}
+
+    for i = 0, GetNumPlayerIdentifiers(src) - 1 do
+        local identifier = GetPlayerIdentifier(src, i)
+        if identifier then
+            identifiers[tostring(identifier):lower()] = true
+        end
+    end
+
+    return identifiers
+end
+
+local function addConfiguredIdentifier(target, prefix, value)
+    value = trimString(value)
+    if value == "" then return end
+
+    local lowered = value:lower()
+    if lowered:find(":", 1, true) then
+        target[lowered] = true
+    else
+        target[(prefix .. lowered):lower()] = true
+    end
+end
+
+local function collectConfiguredSupervisorIdentifiers(supervisorConfig)
+    local configured = {}
+
+    local direct = supervisorConfig.identifiers or supervisorConfig.supervisors or {}
+    if type(direct) == "table" then
+        for key, value in pairs(direct) do
+            local candidate
+            if type(key) == "string" and value == true then
+                candidate = key
+            else
+                candidate = value
+            end
+
+            if candidate ~= nil then
+                addConfiguredIdentifier(configured, "", candidate)
+            end
+        end
+    end
+
+    local convenienceLists = {
+        { key = "licenses", prefix = "license:" },
+        { key = "licenseIds", prefix = "license:" },
+        { key = "license2Ids", prefix = "license2:" },
+        { key = "fivemIds", prefix = "fivem:" },
+        { key = "steamIds", prefix = "steam:" },
+        { key = "discordIds", prefix = "discord:" }
+    }
+
+    for _, entry in ipairs(convenienceLists) do
+        local values = supervisorConfig[entry.key]
+        if type(values) == "table" then
+            for key, value in pairs(values) do
+                local candidate
+                if type(key) == "string" and value == true then
+                    candidate = key
+                else
+                    candidate = value
+                end
+
+                if candidate ~= nil then
+                    addConfiguredIdentifier(configured, entry.prefix, candidate)
+                end
+            end
+        end
+    end
+
+    return configured
+end
+
+local function supervisorAceMatches(src, supervisorConfig)
+    local configuredAces = {}
+
+    local singleAce = trimString(supervisorConfig.ace)
+    if singleAce ~= "" then
+        configuredAces[#configuredAces + 1] = singleAce
+    end
+
+    local aceList = supervisorConfig.aces
+    if type(aceList) == "table" then
+        for key, value in pairs(aceList) do
+            local candidate
+            if type(key) == "string" and value == true then
+                candidate = key
+            else
+                candidate = value
+            end
+
+            candidate = trimString(candidate)
+            if candidate ~= "" then
+                configuredAces[#configuredAces + 1] = candidate
+            end
+        end
+    end
+
+    if #configuredAces == 0 then
+        return false, false
+    end
+
+    for _, ace in ipairs(configuredAces) do
+        if IsPlayerAceAllowed(src, ace) then
+            return true, true
+        end
+    end
+
+    return false, true
+end
+
+local function supervisorIdentifierMatches(src, supervisorConfig)
+    local configured = collectConfiguredSupervisorIdentifiers(supervisorConfig)
+    if next(configured) == nil then
+        return false, false
+    end
+
+    local playerIdentifiers = collectPlayerIdentifiers(src)
+    for identifier in pairs(configured) do
+        if playerIdentifiers[identifier] then
+            return true, true
+        end
+    end
+
+    return false, true
+end
+
+local function sourceHasSupervisorAccess(src, supervisorConfig)
+    if type(supervisorConfig) ~= "table" then return false end
+
+    local aceMatched, hasAceRules = supervisorAceMatches(src, supervisorConfig)
+    local identifierMatched, hasIdentifierRules = supervisorIdentifierMatches(src, supervisorConfig)
+
+    if not hasAceRules and not hasIdentifierRules then
+        return false
+    end
+
+    local mode = trimString(supervisorConfig.authorizationMode)
+    if mode == "" then
+        mode = trimString(Config.CompanyManagement and Config.CompanyManagement.authorizationMode)
+    end
+    mode = mode:lower()
+
+    if mode == "all" then
+        local aceAllowed = not hasAceRules or aceMatched
+        local identifierAllowed = not hasIdentifierRules or identifierMatched
+        return aceAllowed and identifierAllowed
+    end
+
+    -- Default: any matching Badger/Discord ACE or direct identifier is enough.
+    return aceMatched or identifierMatched
+end
+
+local function buildSupervisorState(src)
+    if not companyManagementEnabled() then
+        return { authenticated = false, enabled = false }
+    end
+
+    ensureManagedCompaniesLoaded()
+
+    local session = SupervisorSessions[src]
+    if not session then
+        return { authenticated = false, enabled = true }
+    end
+
+    local record = ManagedCompanies[session.companyId]
+    local supervisorConfig = record and getSupervisorCompanyConfig(record) or nil
+    if not record or not sourceHasSupervisorAccess(src, supervisorConfig) then
+        SupervisorSessions[src] = nil
+        return { authenticated = false, enabled = true }
+    end
+
+    return {
+        authenticated = true,
+        enabled = true,
+        companyId = record.id,
+        companyName = record.name,
+        baseCompanyName = record.baseName,
+        canRename = Config.CompanyManagement.allowRename ~= false,
+        canChangePassword = Config.CompanyManagement.allowPasswordChange ~= false,
+        updatedAt = record.updatedAt
+    }
+end
+
+local function updateCompanyReferences(oldName, newName)
+    if oldName == newName then return end
+
+    for _, info in pairs(TowDrivers) do
+        if info.companyName == oldName then
+            info.companyName = newName
+        end
+    end
+
+    for _, call in pairs(TowCalls) do
+        if call.companyName == oldName then
+            call.companyName = newName
+        end
+
+        if type(call.declinedCompanies) == "table" and call.declinedCompanies[oldName] then
+            call.declinedCompanies[oldName] = nil
+            call.declinedCompanies[newName] = true
+        end
+    end
+end
+
+local function supervisorLogin(src, data)
+    if not companyManagementEnabled() then
+        return { ok = false, error = "Company management is disabled." }
+    end
+
+    local record = getManagedCompanyByInput(data and (data.companyName or data.company) or "")
+    if not record then
+        return { ok = false, error = Config.Messages.unknownCompany or "Unknown tow company." }
+    end
+
+    local supervisorConfig = getSupervisorCompanyConfig(record)
+    if not supervisorConfig or not sourceHasSupervisorAccess(src, supervisorConfig) then
+        return { ok = false, error = Config.Messages.supervisorDenied or "You are not authorized to manage that tow company." }
+    end
+
+    local expectedPassword = tostring(supervisorConfig.supervisorPassword or "")
+    local suppliedPassword = tostring(data and data.password or "")
+    local requirePassword = supervisorConfig.requirePassword
+    if requirePassword == nil then
+        -- Backwards compatibility: an existing non-empty supervisor password
+        -- remains required unless requirePassword is explicitly set to false.
+        requirePassword = expectedPassword ~= ""
+    end
+
+    if requirePassword == true then
+        if expectedPassword == "" or suppliedPassword ~= expectedPassword then
+            return { ok = false, error = Config.Messages.supervisorWrongPassword or "Invalid supervisor password." }
+        end
+    end
+
+    SupervisorSessions[src] = { companyId = record.id, loggedInAt = os.time() }
+    return { ok = true, state = buildSupervisorState(src) }
+end
+
+local function supervisorUpdateCompany(src, data)
+    local state = buildSupervisorState(src)
+    if not state.authenticated then
+        return { ok = false, error = Config.Messages.supervisorDenied or "You are not authorized to manage that tow company." }
+    end
+
+    data = data or {}
+    local management = Config.CompanyManagement or {}
+    local record = ManagedCompanies[state.companyId]
+    if not record then
+        return { ok = false, error = Config.Messages.unknownCompany or "Unknown tow company." }
+    end
+
+    local oldName = record.name
+    local changed = false
+
+    if management.allowRename ~= false and data.companyName ~= nil then
+        local newName = trimString(data.companyName)
+        local minLength = tonumber(management.minCompanyNameLength) or 2
+        local maxLength = tonumber(management.maxCompanyNameLength) or 40
+
+        if #newName < minLength or #newName > maxLength then
+            return { ok = false, error = ("Company name must be between %d and %d characters."):format(minLength, maxLength) }
+        end
+
+        local normalizedNewName = normalizeCompanyName(newName)
+        for id, otherRecord in pairs(ManagedCompanies) do
+            if id ~= record.id and normalizeCompanyName(otherRecord.name) == normalizedNewName then
+                return { ok = false, error = "Another private company already uses that name." }
+            end
+        end
+
+        if newName ~= record.name then
+            record.name = newName
+            changed = true
+        end
+    end
+
+    if management.allowPasswordChange ~= false then
+        local newPassword = tostring(data.password or "")
+        if newPassword ~= "" then
+            local minLength = tonumber(management.minPasswordLength) or 4
+            local maxLength = tonumber(management.maxPasswordLength) or 64
+            if #newPassword < minLength or #newPassword > maxLength then
+                return { ok = false, error = ("Driver password must be between %d and %d characters."):format(minLength, maxLength) }
+            end
+
+            if newPassword ~= record.password then
+                record.password = newPassword
+                changed = true
+            end
+        end
+    end
+
+    if changed then
+        record.updatedAt = os.time()
+        updateCompanyReferences(oldName, record.name)
+        saveManagedCompanies()
+        refreshCompanies()
+        broadcastPhoneAppUpdate()
+        broadcastSupervisorAppUpdate(record.id)
+        notify(src, Config.Messages.companyUpdated or "Tow company settings updated.", "success")
+    end
+
+    return {
+        ok = true,
+        message = changed and (Config.Messages.companyUpdated or "Tow company settings updated.") or "No changes were made.",
+        state = buildSupervisorState(src)
+    }
 end
 
 local function setTowDutyOn(src, company, viaPhone)
@@ -680,9 +1116,20 @@ local function buildTowQueueState(src)
         forcePhoneOnlyMode = forcePhoneOnlyMode(),
         currentCallId = info.currentCallId,
         activeOffer = activeOffer,
-        lbPhoneEnabled = lbPhoneEnabled()
+        lbPhoneEnabled = lbPhoneEnabled(),
+        companyManagementEnabled = companyManagementEnabled()
     }
 end
+
+lib.callback.register('twopoint_tow:getAvailability', function(source)
+    local onDuty, idle = getTowCounts()
+
+    return {
+        available = onDuty > 0,
+        onDuty = onDuty,
+        idle = idle
+    }
+end)
 
 lib.callback.register('twopoint_tow:getQueue', function(source)
     return buildTowQueueState(source)
@@ -766,7 +1213,8 @@ lib.callback.register('twopoint_tow:phoneGetState', function(source)
             forcePhoneOnlyMode = forcePhoneOnlyMode(),
             calls = {},
             busy = false,
-            lbPhoneEnabled = lbPhoneEnabled()
+            lbPhoneEnabled = lbPhoneEnabled(),
+            companyManagementEnabled = companyManagementEnabled()
         }
     end
 
@@ -805,7 +1253,7 @@ end)
 
 lib.callback.register('twopoint_tow:phoneLogout', function(source)
     setTowDutyOff(source)
-    return { ok = true, state = { onDuty = false, calls = {}, phoneOnlyMode = defaultPhoneOnlyMode(), forcePhoneOnlyMode = forcePhoneOnlyMode(), lbPhoneEnabled = lbPhoneEnabled() } }
+    return { ok = true, state = { onDuty = false, calls = {}, phoneOnlyMode = defaultPhoneOnlyMode(), forcePhoneOnlyMode = forcePhoneOnlyMode(), lbPhoneEnabled = lbPhoneEnabled(), companyManagementEnabled = companyManagementEnabled() } }
 end)
 
 lib.callback.register('twopoint_tow:phoneSetPhoneOnlyMode', function(source, data)
@@ -824,9 +1272,30 @@ lib.callback.register('twopoint_tow:phoneSetPhoneOnlyMode', function(source, dat
         state = info.onDuty and buildTowQueueState(source) or {
             onDuty = false,
             phoneOnlyMode = defaultPhoneOnlyMode(),
-            forcePhoneOnlyMode = forcePhoneOnlyMode()
+            forcePhoneOnlyMode = forcePhoneOnlyMode(),
+            companyManagementEnabled = companyManagementEnabled()
         }
     }
+end)
+
+lib.callback.register('twopoint_tow:supervisorGetState', function(source)
+    return buildSupervisorState(source)
+end)
+
+lib.callback.register('twopoint_tow:supervisorLogin', function(source, data)
+    if not lbPhoneEnabled() then
+        return { ok = false, error = "LB Phone is not running." }
+    end
+    return supervisorLogin(source, data or {})
+end)
+
+lib.callback.register('twopoint_tow:supervisorLogout', function(source)
+    SupervisorSessions[source] = nil
+    return { ok = true, state = { authenticated = false, enabled = companyManagementEnabled() } }
+end)
+
+lib.callback.register('twopoint_tow:supervisorUpdateCompany', function(source, data)
+    return supervisorUpdateCompany(source, data or {})
 end)
 
 lib.callback.register('twopoint_tow:phoneAcceptCall', function(source, data)
@@ -1094,6 +1563,8 @@ end)
 
 AddEventHandler('playerDropped', function(reason)
     local src = source
+    SupervisorSessions[src] = nil
+
     local info = TowDrivers[src]
     if not info then return end
 
@@ -1123,6 +1594,7 @@ end)
 AddEventHandler('onResourceStart', function(res)
     if res == GetCurrentResourceName() then
         loadStats()
+        loadManagedCompanies()
         refreshCompanies()
         broadcastAvailability()
         print("[TwoPoint_TowDuty] Standalone Tow Duty started.")
