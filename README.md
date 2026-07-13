@@ -4,7 +4,10 @@ Standalone tow duty + queue system using **ox_lib** and **ox_target**.
 
 ## Dependencies
 
-- ox_lib
+- ox_lib<img width="392" height="844" alt="TwoPoint_TowDuty_v11_duty_preview" src="https://github.com/user-attachments/assets/919e0c14-7735-4e5a-af94-9c2cc4e84cde" />
+<img width="392" height="844" alt="TwoPoint_TowDuty_v11_login_preview" src="https://github.com/user-attachments/assets/54bb208a-8cf0-49c0-9850-649bc40b5cf2" />
+<img width="392" height="844" alt="TwoPoint_TowDuty_v11_supervisor_preview" src="https://github.com/user-attachments/assets/d33cc353-9ffc-4f6f-a7a7-f57dc0fc569f" />
+
 - ox_target
 
 ## Installation
